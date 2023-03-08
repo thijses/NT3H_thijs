@@ -1,0 +1,31 @@
+changes from the NT3H1x01:
+- password protection added (PWD_AUTH, AUTHENTICATED state, AUTH0 memory address), which even limits I2C's memory access.
+  + add authenticated check.
+  + can the password be 'entered' via I2C?
+  + recovery mode / reset?
+  + AUTO0 should be 0xFF unless otherwise specified
+  + AUTHLIM should be ... unless otherwise specified
+- I2C_PROT seems to determine I2C's access to password-protected user memory
+- I2C block 0x39 now has stuff in it (password stuff), instead of NAK
+- (from NFC prespective only:) session registers are moved to new location and a mirror is put in the old location (page 14)
+- the 2K version has significant differences in its memory map, BUT, it's a good thing, because it makes 2K/1K compatibility EASIER!
+  (from I2C perspective) instead of 1 big 'User memory' section, it's now split into 2 sections, the first of which has the exact same layout as the 1k version. (so conf. registers DONT move 1K->2K)
+  (from NFC perspective) the memory is (cleanly) split, sothat the only difference when moving to the 2K variant, is the addition of sector 1 (which just returns NAK in the 1K version)
+  + 2K variant just adds blocks 0x40~0x7F, which is NAK space in the 1K variant. No more address offsets and shit, just a simple addition.
+  + this does mean that large files will be split into 2 (instead of 1 long continuous region), so the (TBD) file handling code needs to jump to 0x40 after 0x38(and-a-half)
+  + dynamic lock bytes are a little different due to the split memory spaces. Just a bit of different math (might not be translated to the user?)
+  + capability container indicating the size of the card is a little trickier, see page 26 for NXP's recommendations.
+- default contents of CC are now always the 1K variant's default values.
+- NFC can now be 'silenced' (kills demodulator even if tag is within NFC field), see page 42
+- NFC commands added: FAST_WRITE, PWD_AUTH and READ_SIG
+- absolute max supply voltage is now 4.6 instead of 3.6 (or that's an unfortunate typo. I'm not really interested in finding out)
+- operating ambient temp is now 105C (instead of 95C)
+(- the documentation (in general) has improved. More/better electrical specs, more documentation (see application notes). Nice!)
+
+things that explicitely DIDN'T change:
+- I2C address memory location (block 0, byte 0) still returns 0x04 (instead of the currently set I2C address)
+- default I2C address is the same (still 0x55)
+- SRAM features appear to be exactly the same (although, password-protected-region(s) with an SRAM-memory-mirror may cause some exceptions, see SRAM_PROT bit)
+- static lock bytes are the same (test, though)
+- I2C read/write operations (both 16-byte-blocks and 1-byte-masked-session-registers) stay the same, so that's nice.
+- pass-though mode appears to be unchanged! (test, though)

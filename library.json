@@ -1,0 +1,21 @@
+{
+  "name": "NT3H_thijs",
+  "version": "1.0.0",
+  "description": "A library for the NT3H1x01 NFC IC",
+  "keywords": "NT3H2111, NT3H2211, NT3H1101, NT3H1201, I2C",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/thijses/NT3H_thijs.git"
+  },
+  "authors":
+  [
+    {
+      "name": "Thijs van Liempd",
+      "email": "tttthijses@gmail.com"
+    }
+  ],
+  "frameworks": "arduino",
+  "platforms": ["atmelavr", "espressif32", "timsp430", "ststm32"],
+  "headers": "NT3H_thijs.h"
+}
