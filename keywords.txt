@@ -8,6 +8,8 @@ NT3H_thijs				KEYWORD1
 _NT3H_thijs_base	KEYWORD1
 
 _blockStruct		KEYWORD1
+# blockZero			KEYWORD1
+# confRegBlock	KEYWORD1
 passwordBlock		KEYWORD1
 
 NT3H_CONF_SESS_REGS_ENUM	KEYWORD1
