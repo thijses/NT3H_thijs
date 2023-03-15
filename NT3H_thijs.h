@@ -181,10 +181,9 @@ MUST WRITE for 2x11:
 - update/remove memory locations in documentation above
 
 TODO (general):
-- _blockStruct for _oneBlockBuff, and some static casting maybe?
-- _blockStruct get functions!
+- test new _blockStruct functions!
+- add _blockStruct stuff to example code
 - find proper CC bytes for NT3H2211 (indicate size correctly) (2x11 datasheet only mentions 0x6D )
-- expand the uses for _blockStruct, as i quite like it (personally)
 - TEST: password stuff! (can I2C even do a PASS_AUTH attempt on its own? (or does it need an NFC reader to do it))
 - TEST: full block read/writes (skip _oneBlockBuff)
 - TEST: useCache (also, did i forget to apply it anywhere?)
@@ -245,8 +244,10 @@ TO write (specific functions):
 
 #define NT3H_SAK_MEMA 0x00                  // SAK memory block
 #define NT3H_SAK_MEMA_BYTE         7        // SAK covers byte 7 (read only)
+static const uint8_t  NT3H_SAK_DEFAULT = 0x00; // default value for SAK byte. I'm not sure what it does (I didn't read the NFC documentation)
 #define NT3H_ATQA_MEMA 0x00                 // ATQA memory block
 #define NT3H_ATQA_MEMA_BYTES_START 8        // ATQA covers bytes 8~9 (read only)
+static const uint8_t  NT3H_ATQA_DEFAULT[2] = {0x44,0x00}; // default values for ATQA bytes (LSByte first)
 
 #define NT3H_CAPA_CONT_MEMA 0x00            // Capability Container memory block
 #define NT3H_CAPA_CONT_MEMA_BYTES_START 12  // Capability Container covers bytes 12~15
@@ -366,41 +367,55 @@ struct _blockStruct { // a nice, consistant packet structure
   inline uint8_t* operator&() {return(_data);} //any attempts to retrieve the address of this object should be met with a byte pointer to _data (it's the same address, just an implicit typecast)
   inline uint8_t& operator[](size_t index) {return(_data[index]);} //i'm hoping the compiler will just know what i mean
 };
-// struct blockZero : public _blockStruct { // a struct specifically for the block at MEMA 0x00, which includes the I2C_addr, UID, static_lock and CC)
-//// TODO: make struct
-// };
-// struct confRegBlock : public _blockStruct { // a struct spefically for the Configuration Register block
-//   inline uint8_t& NC_REG() {return(_data[NT3H_COMN_REGS_NC_REG_BYTE]);} // the (whole) NC_REG byte
-//   inline uint8_t& LAST_NDEF_BLOCK() {return(_data[NT3H_COMN_REGS_LAST_NDEF_BLOCK_BYTE]);} // the SRAM_MIRROR_BLOCK byte
-//   inline uint8_t& SRAM_MIRROR_BLOCK() {return(_data[NT3H_COMN_REGS_SRAM_MIRROR_BLOCK_BYTE]);} // the SRAM_MIRROR_BLOCK byte
-//   inline uint8_t& WDTraw(uint8_t index) {return(_data[index + NT3H_COMN_REGS_WDT_LS_BYTE]);} // the WatchDogTimer bytes, raw bytes
-//   inline uint16_t& WDT_uint16_t() {return((uint16_t&)_data[NT3H_COMN_REGS_WDT_LS_BYTE]);} // the WatchDogTimer as a uint16_t
-//   inline uint8_t& I2C_CLOCK_STR() {return(_data[NT3H_COMN_REGS_I2C_CLOCK_STR_BYTE]);} // the I2C_CLOCK_STR byte
-//   #ifdef NT3H_unlock_burning
-//     inline uint8_t& REG_LOCK() {return(_data[NT3H_CONF_REGS_REG_LOCK_BYTE]);} // the (whole) REG_LOCK byte
-//   #endif
-//   //// i didn't make a constructor for this one, as there are simply too many one-bit options in NC_REG, and because REG_LOCK is frightful
-//   //// set bit functions:
-//   void setNC_FD_OFF(NT3H_FD_OFF_ENUM newVal) { NC_REG() &= ~NT3H_NC_REG_FD_OFF_bits; NC_REG() |= ((static_cast<uint8_t>(newVal) << 4) & NT3H_NC_REG_FD_OFF_bits); }
-//   void setNC_FD_ON(NT3H_FD_ON_ENUM newVal) { NC_REG() &= ~NT3H_NC_REG_FD_ON_bits; NC_REG() |= ((static_cast<uint8_t>(newVal) << 2) & NT3H_NC_REG_FD_ON_bits); }
-//   void setNC_NFCS_I2C_RST(bool newVal) { NC_REG() &= ~NT3H_NC_REG_SIL_SRST_bits; NC_REG() |= (newVal ? NT3H_NC_REG_SIL_SRST_bits : 0); }
-//   void setNC_PTHRU(bool newVal) { NC_REG() &= ~NT3H_NC_REG_PTHRU_bits; NC_REG() |= (newVal ? NT3H_NC_REG_PTHRU_bits : 0); }
-//   void setNC_MIRROR(bool newVal) { NC_REG() &= ~NT3H_NC_REG_MIRROR_bits; NC_REG() |= (newVal ? NT3H_NC_REG_MIRROR_bits : 0); }
-//   void setNC_DIR(bool newVal) { NC_REG() &= ~NT3H_NC_REG_DIR_bits; NC_REG() |= (newVal ? NT3H_NC_REG_DIR_bits : 0); }
-//   void setWDT_float(float newVal) { WDT_uint16_t() = constrain(newVal,0,(((float)0xFFFF)*NT3H_WDT_RAW_TO_MICROSECONDS)) / NT3H_WDT_RAW_TO_MICROSECONDS; } // the WatchDogTimer as a float
-//   #ifdef NT3H_unlock_burning
-//     void burnRegLockI2C() { REG_LOCK() |= NT3H_NC_REG_LOCK_I2C_bits; }
-//     void burnRegLockRF() { REG_LOCK() |= NT3H_NC_REG_LOCK_RF_bits; }
-//   #endif
-//   //// get bit functions:
-//   NT3H_FD_OFF_ENUM getNC_FD_OFF() { return(static_cast<NT3H_FD_OFF_ENUM>((NC_REG() & NT3H_NC_REG_FD_OFF_bits) >> 4)); }
-//   NT3H_FD_ON_ENUM getNC_FD_ON() { return(static_cast<NT3H_FD_ON_ENUM>((NC_REG() & NT3H_NC_REG_FD_ON_bits) >> 2)); }
-//   bool getNC_NFCS_I2C_RST() { return((NC_REG() & NT3H_NC_REG_SIL_SRST_bits) != 0); }
-//   bool getNC_PTHRU() { return((NC_REG() & NT3H_NC_REG_PTHRU_bits) != 0); }
-//   bool getNC_MIRROR() { return((NC_REG() & NT3H_NC_REG_MIRROR_bits) != 0); }
-//   bool getNC_DIR() { return((NC_REG() & NT3H_NC_REG_DIR_bits) != 0); }
-//   float getWDT_float() {return(((float)WDT_uint16_t()) * NT3H_WDT_RAW_TO_MICROSECONDS); } // the WatchDogTimer as a float
-// };
+struct blockZero : public _blockStruct { // a struct specifically for the block at MEMA 0x00, which includes the I2C_addr, UID, static_lock and CC)
+  // inline uint8_t& I2Caddress() {return(_data[NT3H_SERIAL_NR_MEMA_BYTES_START]);} // the I2C address *NOTE: read will return NT3H_SERIAL_NR_NXP_MF_ID
+  inline uint8_t& UID(uint8_t index) {return(_data[index + NT3H_SERIAL_NR_MEMA_BYTES_START]);} // Serial number (UID), 7 bytes, where the first byte is NT3H_SERIAL_NR_NXP_MF_ID
+  inline uint8_t& SAK(uint8_t index) {return(_data[index + NT3H_SAK_MEMA_BYTE]);} // SAK byte. Not sure what it does. Default = 0
+  inline uint8_t& ATQA(uint8_t index) {return(_data[index + NT3H_ATQA_MEMA_BYTES_START]);} // ATQA bytes (LSByte first), 2 bytes. See NT3H_ATQA_DEFAULT for default values
+  // inline uint16_t& ATQA_uint16_t() {return((uint16_t&)_data[NT3H_ATQA_MEMA_BYTES_START]);} // ATQA bytes as uint16_t. NOTE: LSByte-first means little-endian????????
+  inline uint8_t& staticLock(uint8_t index) {return(_data[index + NT3H_STAT_LOCK_MEMA_BYTES_START]);} // Static lock bytes, 2 bytes. See static lock documentation
+  inline uint8_t& CC(uint8_t index) {return(_data[NT3H_CAPA_CONT_MEMA_BYTES_START]);} // Capability Container, 4 bytes. See NT3H_CAPA_CONT_DEFAULT for default values
+  //// set bit functions:
+  //void _setStaticLockBits             // TODO!
+  //void staticLockPage                 // TODO!
+  //uint8_t _staticBlockLockPageToChunk // TODO!
+  //void staticBlockLockChunks          // TODO!
+  //// get bit functions:
+  //bool getPageStaticLocked        // TODO!
+  //bool getChunkStaticBlockLocked  // TODO!
+};
+struct confRegBlock : public _blockStruct { // a struct spefically for the Configuration Register block
+  inline uint8_t& NC_REG() {return(_data[NT3H_COMN_REGS_NC_REG_BYTE]);} // the (whole) NC_REG byte
+  inline uint8_t& LAST_NDEF_BLOCK() {return(_data[NT3H_COMN_REGS_LAST_NDEF_BLOCK_BYTE]);} // the SRAM_MIRROR_BLOCK byte
+  inline uint8_t& SRAM_MIRROR_BLOCK() {return(_data[NT3H_COMN_REGS_SRAM_MIRROR_BLOCK_BYTE]);} // the SRAM_MIRROR_BLOCK byte
+  inline uint8_t& WDTraw(uint8_t index) {return(_data[index + NT3H_COMN_REGS_WDT_LS_BYTE]);} // the WatchDogTimer bytes, raw bytes
+  inline uint16_t& WDT_uint16_t() {return((uint16_t&)_data[NT3H_COMN_REGS_WDT_LS_BYTE]);} // the WatchDogTimer as a uint16_t
+  inline uint8_t& I2C_CLOCK_STR() {return(_data[NT3H_COMN_REGS_I2C_CLOCK_STR_BYTE]);} // the I2C_CLOCK_STR byte
+  #ifdef NT3H_unlock_burning
+    inline uint8_t& REG_LOCK() {return(_data[NT3H_CONF_REGS_REG_LOCK_BYTE]);} // the (whole) REG_LOCK byte
+  #endif
+  //// i didn't make a constructor for this one, as there are simply too many one-bit options in NC_REG, and because REG_LOCK is frightful
+  //// set bit functions:
+  void setNC_FD_OFF(NT3H_FD_OFF_ENUM newVal) { NC_REG() &= ~NT3H_NC_REG_FD_OFF_bits; NC_REG() |= ((static_cast<uint8_t>(newVal) << 4) & NT3H_NC_REG_FD_OFF_bits); }
+  void setNC_FD_ON(NT3H_FD_ON_ENUM newVal) { NC_REG() &= ~NT3H_NC_REG_FD_ON_bits; NC_REG() |= ((static_cast<uint8_t>(newVal) << 2) & NT3H_NC_REG_FD_ON_bits); }
+  void setNC_NFCS_I2C_RST(bool newVal) { NC_REG() &= ~NT3H_NC_REG_SIL_SRST_bits; NC_REG() |= (newVal ? NT3H_NC_REG_SIL_SRST_bits : 0); }
+  void setNC_PTHRU(bool newVal) { NC_REG() &= ~NT3H_NC_REG_PTHRU_bits; NC_REG() |= (newVal ? NT3H_NC_REG_PTHRU_bits : 0); }
+  void setNC_MIRROR(bool newVal) { NC_REG() &= ~NT3H_NC_REG_MIRROR_bits; NC_REG() |= (newVal ? NT3H_NC_REG_MIRROR_bits : 0); }
+  void setNC_DIR(bool newVal) { NC_REG() &= ~NT3H_NC_REG_DIR_bits; NC_REG() |= (newVal ? NT3H_NC_REG_DIR_bits : 0); }
+  void setWDT_float(float newVal) { WDT_uint16_t() = constrain(newVal,0,(((float)0xFFFF)*NT3H_WDT_RAW_TO_MICROSECONDS)) / NT3H_WDT_RAW_TO_MICROSECONDS; } // the WatchDogTimer as a float
+  #ifdef NT3H_unlock_burning
+    void burnRegLockI2C() { REG_LOCK() |= NT3H_NC_REG_LOCK_I2C_bits; }
+    void burnRegLockRF() { REG_LOCK() |= NT3H_NC_REG_LOCK_RF_bits; }
+  #endif
+  //// get bit functions:
+  NT3H_FD_OFF_ENUM getNC_FD_OFF() { return(static_cast<NT3H_FD_OFF_ENUM>((NC_REG() & NT3H_NC_REG_FD_OFF_bits) >> 4)); }
+  NT3H_FD_ON_ENUM getNC_FD_ON() { return(static_cast<NT3H_FD_ON_ENUM>((NC_REG() & NT3H_NC_REG_FD_ON_bits) >> 2)); }
+  bool getNC_NFCS_I2C_RST() { return((NC_REG() & NT3H_NC_REG_SIL_SRST_bits) != 0); }
+  bool getNC_PTHRU() { return((NC_REG() & NT3H_NC_REG_PTHRU_bits) != 0); }
+  bool getNC_MIRROR() { return((NC_REG() & NT3H_NC_REG_MIRROR_bits) != 0); }
+  bool getNC_DIR() { return((NC_REG() & NT3H_NC_REG_DIR_bits) != 0); }
+  float getWDT_float() {return(((float)WDT_uint16_t()) * NT3H_WDT_RAW_TO_MICROSECONDS); } // the WatchDogTimer as a float
+};
 struct passwordBlock : public _blockStruct { // (NT3H2x11 only) a struct specifically for the password block, just to make sure it's all written correctly (and you don't lock yourself out)
   inline uint8_t& ACCESS() {return(_data[NT3H2x11_ACCESS_MEMA_BYTE]);} // the (whole) ACCESS byte
   inline uint8_t& PWD(uint8_t index) {return(_data[index + NT3H2x11_PWD_MEMA_BYTES_START]);} // the password as bytes
@@ -441,8 +456,8 @@ class NT3H_thijs : public _NT3H_thijs_base
 {
   public:
   //private:
-  uint8_t _oneBlockBuff[NT3H_BLOCK_SIZE]; // used for user-friendly functions. A cache of 1 block of memory, to be used whenever less-than-a-whole-block is to be changed (less memory assignment overhead)
-  // _blockStruct _oneBlockBuff; // used for user-friendly functions. A cache of 1 block of memory, to be used whenever less-than-a-whole-block is to be changed (less memory assignment overhead)
+  // uint8_t _oneBlockBuff[NT3H_BLOCK_SIZE]; // used for user-friendly functions. A cache of 1 block of memory, to be used whenever less-than-a-whole-block is to be changed (less memory assignment overhead)
+  _blockStruct _oneBlockBuff; // used for user-friendly functions. A cache of 1 block of memory, to be used whenever less-than-a-whole-block is to be changed (less memory assignment overhead)
   uint8_t _oneBlockBuffAddress = NT3H_INVALID_MEMA; // indicates the memory address the _oneBlockBuff stores. Use with great caution, and only if speed is an absolute necessity!
   uint8_t _passwordAndPackBuff[6] = {0}; // (NT3H2x11 only) the password and PACK (password acknowledge) cannot be Read, so overwriting anything in block 0x39 will overwrite the password and PACK
   bool _passwordAndPackStored = false; // (NT3H2x11 only) useful for generating debug print messages (in case you're overwriting a password unintentionally)
@@ -490,15 +505,15 @@ class NT3H_thijs : public _NT3H_thijs_base
   NT3H_ERR_RETURN_TYPE _getBytesFromBlock(uint8_t blockAddress, uint8_t bytesInBlockStart, uint8_t bytesToRead, uint8_t readBuff[], bool useCache=false) {
     if((bytesInBlockStart+bytesToRead) > NT3H_BLOCK_SIZE) { NT3HdebugPrint("_getBytesFromBlock() MISUSE!, you're trying to read bytes outside of the buffer"); return(NT3H_ERR_RETURN_TYPE_FAIL); }
         // bytesInBlockStart=(bytesInBlockStart%NT3H_BLOCK_SIZE); bytesToRead=min((uint8_t)(NT3H_BLOCK_SIZE-bytesInBlockStart), bytesToRead); } // safety measures instead of return()
-    uint8_t* whichBuffToUse = _oneBlockBuff; // default to class member block
+    uint8_t* whichBuffToUse = (&_oneBlockBuff); // default to class member block
     if((bytesToRead == NT3H_BLOCK_SIZE) && (bytesInBlockStart == 0)) { whichBuffToUse = readBuff; } // ONLY IF readBuff is actually a full block's worth of data, then you can read directly to it (skip copying)
     NT3H_ERR_RETURN_TYPE err = NT3H_ERR_RETURN_TYPE_OK;
-    if( ! (useCache && (blockAddress == _oneBlockBuffAddress) && (whichBuffToUse == _oneBlockBuff))) { // normally true
+    if( ! (useCache && (blockAddress == _oneBlockBuffAddress) && (whichBuffToUse == (&_oneBlockBuff)))) { // normally true
       err = requestMemBlock(blockAddress, whichBuffToUse); // fetch the whole block
-      if(whichBuffToUse == _oneBlockBuff) { _oneBlockBuffAddress = blockAddress; } // remember which block is in the chache for later
+      if(whichBuffToUse == (&_oneBlockBuff)) { _oneBlockBuffAddress = blockAddress; } // remember which block is in the chache for later
       if(!_errGood(err)) { NT3HdebugPrint("_getBytesFromBlock() read/write error!"); _oneBlockBuffAddress = NT3H_INVALID_MEMA; return(err); }
     }
-    if(whichBuffToUse == _oneBlockBuff) { for(uint8_t i=0; i<bytesToRead; i++) { readBuff[i] = _oneBlockBuff[i+bytesInBlockStart]; } } // copy data (if readBuff does not contain whole block)
+    if(whichBuffToUse == (&_oneBlockBuff)) { for(uint8_t i=0; i<bytesToRead; i++) { readBuff[i] = _oneBlockBuff[i+bytesInBlockStart]; } } // copy data (if readBuff does not contain whole block)
     return(err); // err should always be OK, if it makes it to this point
   }
   /**
@@ -534,10 +549,10 @@ class NT3H_thijs : public _NT3H_thijs_base
    * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote/read successfully
    */
   NT3H_ERR_RETURN_TYPE _setBytesInBlock(uint8_t blockAddress, uint8_t bytesInBlockStart, uint8_t bytesToWrite, uint8_t writeBuff[], bool useCache=false) {
-    uint8_t* whichBuffToUse = _oneBlockBuff; // default to class member block
+    uint8_t* whichBuffToUse = (&_oneBlockBuff); // default to class member block
     if((bytesToWrite == NT3H_BLOCK_SIZE) && (bytesInBlockStart == 0)) { whichBuffToUse = writeBuff; } // ONLY IF readBuff is actually a full block's worth of data, then you can read directly to it (skip copying)
     NT3H_ERR_RETURN_TYPE err = NT3H_ERR_RETURN_TYPE_OK;
-    if(whichBuffToUse == _oneBlockBuff) { // if the writeBuff is not an entire block worth of data, you must first read the block (to fill in the gaps when you send it back)
+    if(whichBuffToUse == (&_oneBlockBuff)) { // if the writeBuff is not an entire block worth of data, you must first read the block (to fill in the gaps when you send it back)
       if( ! (useCache && (blockAddress == _oneBlockBuffAddress))) { // normally true
         err = requestMemBlock(blockAddress, _oneBlockBuff); _oneBlockBuffAddress = blockAddress; // fetch the whole block
         if(!_errGood(err)) { NT3HdebugPrint("_setBytesInBlock() read/write error!"); _oneBlockBuffAddress = NT3H_INVALID_MEMA; return(err); }
@@ -619,6 +634,32 @@ class NT3H_thijs : public _NT3H_thijs_base
     return(err);
   }
 
+  /**
+   * (private) for fetching whole blocks into _blockStruct objects.
+   * @param blockAddress MEMory Address (MEMA) of the block
+   * @param useCache (optional!, not recommended, use at own discretion) use data from _oneBlockBuff cache (if possible) instead of actually reading it from I2C (to save a little time).
+   * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote/read successfully
+  */
+  NT3H_ERR_RETURN_TYPE _getMemBlock(uint8_t blockAddress, bool useCache=false) {
+    NT3H_ERR_RETURN_TYPE err = NT3H_ERR_RETURN_TYPE_OK;
+    if( ! (useCache && (blockAddress == _oneBlockBuffAddress))) { // normally true
+      err = requestMemBlock(blockAddress, _oneBlockBuff); _oneBlockBuffAddress = blockAddress; // fetch the whole block
+      if(!_errGood(err)) { NT3HdebugPrint("_getMemBlock() read/write error!"); _oneBlockBuffAddress = NT3H_INVALID_MEMA; return(err); }
+    }
+    return(err);
+  }
+  /**
+   * (private) for fetching whole blocks into _blockStruct objects (NOTE: this function allocates a whole block, and is therefore potentially slow!)
+   * @param blockAddress MEMory Address (MEMA) of the block
+   * @return _blockStruct object it read into (unless something went wrong)
+  */
+  _blockStruct _getMemBlockCopy(uint8_t blockAddress) {
+    blockZero retVal;
+    NT3H_ERR_RETURN_TYPE err = requestMemBlock(blockAddress, retVal);
+    if(!_errGood(err)) { NT3HdebugPrint("_getMemBlockCopy() read/write error!"); }
+    return(retVal);
+  }
+
 /////////////////////////////////////////////////////////////////////////////////////// set functions: //////////////////////////////////////////////////////////
 
   /**
@@ -648,6 +689,20 @@ class NT3H_thijs : public _NT3H_thijs_base
    * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote/read successfully
    */
   NT3H_ERR_RETURN_TYPE setCC(uint32_t newVal, bool useCache = false) { return(_setValInBlock<uint32_t>(NT3H_CAPA_CONT_MEMA, NT3H_CAPA_CONT_MEMA_BYTES_START, newVal, true, useCache)); }
+
+  /**
+   * overwrite whole block at MEMA=0x00
+   * @param blockToWrite is a special struct which will ensure the whole block gets written all at once
+   * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote successfully
+   */
+  NT3H_ERR_RETURN_TYPE writeBlockZero(blockZero& blockToWrite) {
+    //// NOTE: I2C address byte writing is dangerous
+    NT3H_ERR_RETURN_TYPE err = writeMemBlock(0x00, &blockToWrite); // note: &blockZero returns a uint8_t&, as explicitely defined in the _blockStruct class
+    // NT3H_ERR_RETURN_TYPE err = _writeBlockStruct(0x00, blockToWrite); // excessive macro
+    if(_errGood(err)) { slaveAddress = blockToWrite.UID(0); } // update this object's address byte ONLY IF the transfer seemed to go as intended
+    else { NT3HdebugPrint("writeBlockZero() failed!, which may affect I2C address"); }
+    return(err);
+  }
 
   ///////////////////////////////////// Session register set functions: /////////////////////////////////////
   /**
@@ -914,6 +969,16 @@ class NT3H_thijs : public _NT3H_thijs_base
     NT3H_ERR_RETURN_TYPE burnRegLockRF(bool useCache=false) { return(_setConfRegVal<uint8_t>(NT3H_CONF_REGS_REG_LOCK_BYTE, NT3H_NC_REG_LOCK_RF_bits, false, useCache)); }
   #endif // NT3H_unlock_burning
 
+  /**
+   * overwrite whole configuration registers block
+   * @param blockToWrite is a special struct which will ensure the whole block gets written all at once
+   * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote successfully
+   */
+  NT3H_ERR_RETURN_TYPE writeConfRegBlock(confRegBlock& blockToWrite) {
+    return(writeMemBlock(((!isNewVersion) && is2kVariant) ? NT3H1201_CONF_REGS_MEMA : NT3Hxxx1_CONF_REGS_MEMA, &blockToWrite)); // note: &confRegBlock returns a uint8_t&, as explicitely defined in the _blockStruct class
+    // return(_writeBlockStruct(((!isNewVersion) && is2kVariant) ? NT3H1201_CONF_REGS_MEMA : NT3Hxxx1_CONF_REGS_MEMA, blockToWrite)); // excessive macro
+  }
+
   ///////////////////////////////////// password (related) set functions (NT3H2x11 only): /////////////////////////////////////
   //// NOTE: you cannot read the password and PACK values, so the functions below that set() partial blocks (all of them), are going to overwrite the password as well!
   ////        therefore, use either storePWD_and_PACK() or setPWD_and_PACK() before any other functions, or just use a passwordBlock struct and writePasswordBlock() to write the whole block in one go
@@ -1042,18 +1107,6 @@ class NT3H_thijs : public _NT3H_thijs_base
     storePWD_and_PACK(password, PACK); // saves password and PACK to _passwordAndPackBuff (note: this is technically redundant, as _setBytesInBlock() will also call (the buffer version of) this function)
     return(_writePWD_and_PACK(useCache)); // write _passwordAndPackBuff to device
   } // (just a macro)
-  /**
-   * overwrite whole block 0x39 (which holds the password stuff) at once. This is the best way to ensure all settings are written correctly (NT3H2x11 only)
-   * @param blockToWrite is a special struct which will ensure the whole block gets written all at once
-   * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote successfully
-   */
-  NT3H_ERR_RETURN_TYPE writePasswordBlock(passwordBlock& blockToWrite) {
-    if(!isNewVersion) { NT3HdebugPrint("password functions are only available on NT3H2x11"); return(NT3H_ERR_RETURN_TYPE_FAIL); }
-    storePWD_and_PACK(&(blockToWrite.PWD(0)), &(blockToWrite.PACK(0))); // saves password and PACK to _passwordAndPackBuff
-    // storePWD_and_PACK(blockToWrite.PWD_uint32_t(), blockToWrite.PACK_uint16_t()); // same thing as line above, but perhaps more legible
-    return(writeMemBlock(NT3H2x11_PWD_MEMA, &blockToWrite)); // note: &passwordBlock returns a uint8_t&, as explicitely defined in the _blockStruct class
-    // return(_writeBlockStruct(NT3H2x11_PWD_MEMA, blockToWrite)); // excessive macro
-  }
   
   /**
    * overwrite the (whole) PT_I2C byte (for password stuff) (NT3H2x11 only)
@@ -1092,6 +1145,18 @@ class NT3H_thijs : public _NT3H_thijs_base
     if(!isNewVersion) { NT3HdebugPrint("password functions are only available on NT3H2x11"); return(NT3H_ERR_RETURN_TYPE_FAIL); }
     return(_setBitsInBlock(NT3H2x11_PT_I2C_MEMA, NT3H2x11_PT_I2C_MEMA_BYTE, newVal, NT3H2x11_PT_I2C_I2C_PROT_bits, useCache)); } // (just a macro)
 
+  /**
+   * overwrite whole block 0x39 (which holds the password stuff) at once. This is the best way to ensure all settings are written correctly (NT3H2x11 only)
+   * @param blockToWrite is a special struct which will ensure the whole block gets written all at once
+   * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote successfully
+   */
+  NT3H_ERR_RETURN_TYPE writePasswordBlock(passwordBlock& blockToWrite) {
+    if(!isNewVersion) { NT3HdebugPrint("password functions are only available on NT3H2x11"); return(NT3H_ERR_RETURN_TYPE_FAIL); }
+    storePWD_and_PACK(&(blockToWrite.PWD(0)), &(blockToWrite.PACK(0))); // saves password and PACK to _passwordAndPackBuff
+    // storePWD_and_PACK(blockToWrite.PWD_uint32_t(), blockToWrite.PACK_uint16_t()); // same thing as line above, but perhaps more legible
+    return(writeMemBlock(NT3H2x11_PWD_MEMA, &blockToWrite)); // note: &passwordBlock returns a uint8_t&, as explicitely defined in the _blockStruct class
+    // return(_writeBlockStruct(NT3H2x11_PWD_MEMA, blockToWrite)); // excessive macro
+  }
 
 /////////////////////////////////////////////////////////////////////////////////////// get functions: //////////////////////////////////////////////////////////
 
@@ -1144,6 +1209,18 @@ class NT3H_thijs : public _NT3H_thijs_base
    */
   uint8_t getSAK(bool useCache=false) { return(_getValFromBlock<uint8_t>(NT3H_SAK_MEMA, NT3H_SAK_MEMA_BYTE, true, useCache)); } // (just a macro)
 
+  /**
+   * retrieve the whole block at MEMA=0x00 (this version of the function lets you check for I2C errors)
+   * @param readBuff blockZero (_blockStruct) reference to put the result in
+   * @param useCache (optional!, not recommended, use at own discretion) fetch data from _oneBlockBuff cache (if possible) instead of actually reading it from I2C (to save a little time).
+   * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote/read successfully
+   */
+  NT3H_ERR_RETURN_TYPE getBlockZero(blockZero& readBuff, bool useCache=false) { return(_getMemBlock(0x00, useCache)); } // (just a macro)
+  /**
+   * retrieve the whole block at MEMA=0x00 (this version DOES NOT let you check for I2C errors)
+   * @return blockZero struct object (NOTE: allocation of this block is not the fastest!)
+   */
+  blockZero getBlockZero() { _blockStruct retVal = _getMemBlockCopy(0x00); return((blockZero&)retVal); } // (just a macro)  (NOTE: should not copy needlessly, only construct 1 _blockStruct)
 
   ///////////////////////////////////// Session register get functions: /////////////////////////////////////
   /**
@@ -1478,6 +1555,23 @@ class NT3H_thijs : public _NT3H_thijs_base
    */
   uint8_t getREG_LOCK(bool useCache=false) { return(_getConfRegVal<uint8_t>(NT3H_CONF_REGS_REG_LOCK_BYTE, true, useCache)); } // (just a macro)
 
+  /**
+   * retrieve the whole configuration registers block (this version of the function lets you check for I2C errors)
+   * @param readBuff confRegBlock (_blockStruct) reference to put the result in
+   * @param useCache (optional!, not recommended, use at own discretion) fetch data from _oneBlockBuff cache (if possible) instead of actually reading it from I2C (to save a little time).
+   * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote/read successfully
+   */
+  NT3H_ERR_RETURN_TYPE getConfRegBlock(confRegBlock& readBuff, bool useCache=false) {
+    return(_getMemBlock(((!isNewVersion) && is2kVariant) ? NT3H1201_CONF_REGS_MEMA : NT3Hxxx1_CONF_REGS_MEMA, useCache)); } // (just a macro)
+  /**
+   * retrieve the whole configuration registers block (this version DOES NOT let you check for I2C errors)
+   * @return confRegBlock struct object (NOTE: allocation of this block is not the fastest!)
+   */
+  confRegBlock getConfRegBlock() {
+    _blockStruct retVal = _getMemBlockCopy(((!isNewVersion) && is2kVariant) ? NT3H1201_CONF_REGS_MEMA : NT3Hxxx1_CONF_REGS_MEMA);
+    return((confRegBlock&)retVal);
+  } // (just a macro)  (NOTE: should not copy needlessly, only construct 1 _blockStruct)
+
 
   ///////////////////////////////////// password (related) get functions (NT3H2x11 only): /////////////////////////////////////
   /**
@@ -1588,6 +1682,21 @@ class NT3H_thijs : public _NT3H_thijs_base
   uint8_t getPT_I2C_I2C_PROT(bool useCache=false) {
     if(!isNewVersion) { NT3HdebugPrint("password functions are only available on NT3H2x11"); return(0); }
     return(getPT_I2C(useCache) & NT3H2x11_PT_I2C_I2C_PROT_bits); } // (just a macro)
+  
+  //// retrieving the password block doesn't really make sense, as PWD and PAK read as all 0's
+  // /**
+  //  * retrieve the whole password block (0x39) (this version of the function lets you check for I2C errors) (NT3H2x11 only)
+  //  * @param readBuff passwordBlock (_blockStruct) reference to put the result in
+  //  * @param useCache (optional!, not recommended, use at own discretion) fetch data from _oneBlockBuff cache (if possible) instead of actually reading it from I2C (to save a little time).
+  //  * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote/read successfully
+  //  */
+  // NT3H_ERR_RETURN_TYPE getPasswordBlock(passwordBlock& readBuff, bool useCache=false) {
+  //   return(_getMemBlock(NT3H2x11_PWD_MEMA, useCache)); } // (just a macro)
+  // /**
+  //  * retrieve the whole password block (0x39) (this version DOES NOT let you check for I2C errors) (NT3H2x11 only)
+  //  * @return confRegBlock struct object (NOTE: allocation of this block is not the fastest!)
+  //  */
+  // passwordBlock getPasswordBlock() { _blockStruct retVal = _getMemBlockCopy(NT3H2x11_PWD_MEMA); return((passwordBlock&)retVal); } // (just a macro)  (NOTE: should not copy needlessly, only construct 1 _blockStruct)
 
 /////////////////////////////////////////////////////////////////////////////////////// debug functions: //////////////////////////////////////////////////////////
 

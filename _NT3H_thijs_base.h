@@ -686,25 +686,34 @@ class _NT3H_thijs_base
 
     public:
 
-    i2c_t _i2c; // handler thingy (presumably)
+    i2c_t* _i2c; // handler thingy (presumably)
     static const uint8_t STM32_MASTER_ADDRESS = 0x01; // a reserved address which tells the peripheral it's a master, not a slave
     
     /**
-     * initialize I2C peripheral on STM32
+     * initialize I2C peripheral on STM32 (NOTE: repeated initializations of the same I2C peripheral (on the same pins) will result in a silent crash)
      * @param frequency SCL clock freq in Hz
      * @param SDApin pin (arduino naming) to use as SDA (select few possible)
      * @param SCLpin pin (arduino naming) to use as SCL (select few possible)
      * @param generalCall i'm honestly not sure, the STM32 twi library is not documented very well...
+     * @return (pointer to) the i2c_t object that was initialized. (to be passed to subsequent init() functions)
      */
-    void init(uint32_t frequency, uint32_t SDApin=PIN_WIRE_SDA, uint32_t SCLpin=PIN_WIRE_SCL, bool generalCall = false) {
-      _i2c.sda = digitalPinToPinName(SDApin);
-      _i2c.scl = digitalPinToPinName(SCLpin);
-      _i2c.__this = (void *)this; // i truly do not understand the stucture of the STM32 i2c_t, but whatever, i guess the i2c_t class needs to know where this higher level class is or something
-      _i2c.isMaster = true;
-      _i2c.generalCall = (generalCall == true) ? 1 : 0; // 'generalCall' is just a uint8_t instead of a bool
-      i2c_custom_init(&_i2c, frequency, I2C_ADDRESSINGMODE_7BIT, (STM32_MASTER_ADDRESS << 1)); // this selects which I2C peripheral is used based on what pins you entered
-      // note: use i2c_setTiming(&_i2c, frequency) if you want to change the frequency later
+    i2c_t* init(uint32_t frequency, uint32_t SDApin=PIN_WIRE_SDA, uint32_t SCLpin=PIN_WIRE_SCL, bool generalCall = false) {
+      _i2c = new i2c_t;
+      _i2c->sda = digitalPinToPinName(SDApin);
+      _i2c->scl = digitalPinToPinName(SCLpin);
+      _i2c->__this = (void *)this; // i truly do not understand the stucture of the STM32 i2c_t, but whatever, i guess the i2c_t class needs to know where this higher level class is or something
+      _i2c->isMaster = true;
+      _i2c->generalCall = (generalCall == true) ? 1 : 0; // 'generalCall' is just a uint8_t instead of a bool
+      i2c_custom_init(_i2c, frequency, I2C_ADDRESSINGMODE_7BIT, (STM32_MASTER_ADDRESS << 1)); // this selects which I2C peripheral is used based on what pins you entered
+      // note: use i2c_setTiming(_i2c, frequency) if you want to change the frequency later
+      return(_i2c);
     }
+
+    /**
+     * initialize I2C peripheral on STM32 (NOTE: use this if the I2C bus was already initialized!)
+     * @param i2c_t_Ptr (pointer to) an i2c_t object (already initialized)
+    */
+    void init(i2c_t* i2c_t_Ptr) { _i2c = i2c_t_Ptr; } // use the pre-initialized i2c_t object
     
     /**
      * request a block of memory (NOTE: Session register data must be requested using requestSessRegByte() function)
@@ -714,9 +723,9 @@ class _NT3H_thijs_base
      */
     NT3H_ERR_RETURN_TYPE requestMemBlock(uint8_t blockAddress, uint8_t readBuff[]) {
       #if defined(I2C_OTHER_FRAME) // not on all STM32 variants
-        _i2c.handle.XferOptions = I2C_OTHER_AND_LAST_FRAME; // (this one i don't understand, but the Wire.h library does it, and without it i get HAL_I2C_ERROR_SIZE~~64 (-> I2C_ERROR~~4))
+        _i2c->handle.XferOptions = I2C_OTHER_AND_LAST_FRAME; // (this one i don't understand, but the Wire.h library does it, and without it i get HAL_I2C_ERROR_SIZE~~64 (-> I2C_ERROR~~4))
       #endif
-      i2c_status_e err = i2c_master_write(&_i2c, (slaveAddress << 1), &blockAddress, 1);
+      i2c_status_e err = i2c_master_write(_i2c, (slaveAddress << 1), &blockAddress, 1);
       if(err != I2C_OK) {
         NT3HdebugPrint("requestReadBytes() i2c_master_write error!");
         #ifdef NT3H_return_i2c_status_e
@@ -736,10 +745,10 @@ class _NT3H_thijs_base
      */
     NT3H_ERR_RETURN_TYPE requestSessRegByte(NT3H_CONF_SESS_REGS_ENUM registerIndex, uint8_t& readBuff) {
       #if defined(I2C_OTHER_FRAME) // not on all STM32 variants
-        _i2c.handle.XferOptions = I2C_OTHER_AND_LAST_FRAME; // (this one i don't understand, but the Wire.h library does it, and without it i get HAL_I2C_ERROR_SIZE~~64 (-> I2C_ERROR~~4))
+        _i2c->handle.XferOptions = I2C_OTHER_AND_LAST_FRAME; // (this one i don't understand, but the Wire.h library does it, and without it i get HAL_I2C_ERROR_SIZE~~64 (-> I2C_ERROR~~4))
       #endif
       uint8_t requestArr[2] = {NT3H_SESS_REGS_MEMA, registerIndex};
-      i2c_status_e err = i2c_master_write(&_i2c, (slaveAddress << 1), requestArr, 2);
+      i2c_status_e err = i2c_master_write(_i2c, (slaveAddress << 1), requestArr, 2);
       if(err != I2C_OK) {
         NT3HdebugPrint("requestReadBytes() i2c_master_write error!");
         #ifdef NT3H_return_i2c_status_e
@@ -759,9 +768,9 @@ class _NT3H_thijs_base
      */
     NT3H_ERR_RETURN_TYPE _onlyReadBytes(uint8_t readBuff[], uint8_t bytesToRead) {
       #if defined(I2C_OTHER_FRAME) // if the STM32 subfamily is capable of writing without sending a stop
-        _i2c.handle.XferOptions = I2C_OTHER_AND_LAST_FRAME; // tell the peripheral it should send a STOP at the end
+        _i2c->handle.XferOptions = I2C_OTHER_AND_LAST_FRAME; // tell the peripheral it should send a STOP at the end
       #endif
-      i2c_status_e err = i2c_master_read(&_i2c, (slaveAddress << 1), readBuff, bytesToRead);
+      i2c_status_e err = i2c_master_read(_i2c, (slaveAddress << 1), readBuff, bytesToRead);
       if(err != I2C_OK) { NT3HdebugPrint("onlyReadBytes() i2c_master_read error!"); }
       #ifdef NT3H_return_i2c_status_e
         return(err);
@@ -781,10 +790,10 @@ class _NT3H_thijs_base
       // note: for some alternate (potentially intersting) code, please refer to writeBytes() in AS5600_thijs or TMP112_thijs
       if(bytesToWrite > NT3H_BLOCK_SIZE) {/* PANIC */  NT3HdebugPrint("writeMemBlock() can only write in blocks of 16 bytes, not more!"); return(NT3H_ERR_RETURN_TYPE_FAIL); }
       #if defined(I2C_OTHER_FRAME) // if the STM32 subfamily is capable of writing without sending a stop
-        _i2c.handle.XferOptions = I2C_OTHER_AND_LAST_FRAME; // tell the peripheral it should send a STOP at the end
+        _i2c->handle.XferOptions = I2C_OTHER_AND_LAST_FRAME; // tell the peripheral it should send a STOP at the end
       #endif
       uint8_t copiedArray[NT3H_BLOCK_SIZE+1]; copiedArray[0]=blockAddress; for(uint8_t i=0;i<NT3H_BLOCK_SIZE;i++) { copiedArray[i+1]=(i<bytesToWrite) ? writeBuff[i] : 0; }
-      i2c_status_e err = i2c_master_write(&_i2c, (slaveAddress << 1), copiedArray, NT3H_BLOCK_SIZE+1);
+      i2c_status_e err = i2c_master_write(_i2c, (slaveAddress << 1), copiedArray, NT3H_BLOCK_SIZE+1);
       if(err != I2C_OK) { NT3HdebugPrint("writeMemBlock() i2c_master_write error!"); }
       #ifdef NT3H_return_i2c_status_e
         return(err);
@@ -802,10 +811,10 @@ class _NT3H_thijs_base
      */
     NT3H_ERR_RETURN_TYPE writeSessRegByte(NT3H_CONF_SESS_REGS_ENUM registerIndex, uint8_t regDat, uint8_t mask=0xFF) {
       #if defined(I2C_OTHER_FRAME) // if the STM32 subfamily is capable of writing without sending a stop
-        _i2c.handle.XferOptions = I2C_OTHER_AND_LAST_FRAME; // tell the peripheral it should send a STOP at the end
+        _i2c->handle.XferOptions = I2C_OTHER_AND_LAST_FRAME; // tell the peripheral it should send a STOP at the end
       #endif
       uint8_t regWriteArr[4] = {NT3H_SESS_REGS_MEMA, registerIndex, mask, regDat};
-      i2c_status_e err = i2c_master_write(&_i2c, (slaveAddress << 1), regWriteArr, 4);
+      i2c_status_e err = i2c_master_write(_i2c, (slaveAddress << 1), regWriteArr, 4);
       if(err != I2C_OK) { NT3HdebugPrint("writeSessRegByte() i2c_master_write error!"); }
       #ifdef NT3H_return_i2c_status_e
         return(err);
@@ -835,6 +844,14 @@ class _NT3H_thijs_base
    * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote successfully
    */
   NT3H_ERR_RETURN_TYPE writeMemBlock(uint8_t blockAddress, _blockStruct& blockToWrite) { return(writeMemBlock(blockAddress, &blockToWrite)); } // (just a macro)
+  /**
+   * read a whole block (into a dedicated struct). Just a macro to the other requestMemBlock(), as &_blockStruct returns a uint8_t&
+   * @param blockAddress MEMory Address (MEMA) of the block
+   * @param readBuff (reference object) is a special struct which helps to decode the data in the block
+   * @return (bool or esp_err_t or i2c_status_e, see on defines at top) whether it wrote successfully
+   */
+  NT3H_ERR_RETURN_TYPE requestMemBlock(uint8_t blockAddress, _blockStruct& readBuff) { return(requestMemBlock(blockAddress, &readBuff)); } // (just a macro)
+
 
   /*
   the remainder of the code can be found in the main header file: NT3H_thijs.h
