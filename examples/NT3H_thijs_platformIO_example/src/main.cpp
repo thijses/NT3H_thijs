@@ -86,6 +86,11 @@ void setup()
   #elif defined(ARDUINO_ARCH_STM32)
     // not sure if STM32 needs pinMode setting for I2C
     NFCtag.init(100000, SDA, SCL, false); // TODO: test what the limits of this poor microcontroller are ;)
+    /* NOTE: for initializing multiple devices, the code should look roughly like this:
+      i2c_t* sharedBus = NFCtag.init(100000, SDA, SCL, false); // returns NFCtag._i2c (which is (currently) also just a public member, btw)
+      secondNFCtag.init(sharedBus); // pass the i2c_t object (pointer) to the second device, to avoid re-initialization of the i2c peripheral
+      //// repeated initialization of the same i2c peripheral will result in unexplained errors or silent crashes (during the first read/write action)!
+    */
   #else
     #error("should never happen, NT3H_useWireLib should have automatically been selected if your platform isn't one of the optimized ones")
   #endif
