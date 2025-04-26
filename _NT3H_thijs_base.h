@@ -417,7 +417,7 @@ class _NT3H_thijs_base
     
     public:
     //// I2C constants:
-    i2c_port_t I2Cport = 0;
+    i2c_port_t I2Cport = I2C_NUM_0;
     uint32_t I2Ctimeout = 10; //in millis
     //const TickType_t I2CtimeoutTicks = 100 / portTICK_RATE_MS; //timeout (divide by portTICK_RATE_MS to convert millis to the right format)
     //uint8_t constWriteBuff[1]; //i2c_master_write_read_device() requires a const uint8_t* writeBuffer. You can make this array bigger if you want, shouldnt really matter
@@ -428,18 +428,19 @@ class _NT3H_thijs_base
      * @param SDApin GPIO pin to use as SDA
      * @param SCLpin GPIO pin to use as SCL
      * @param I2CportToUse which of the ESP32's I2C peripherals to use
+     * @param pullEnable whether or not to enable internal pullups
      * @return (esp_err_t) whether it was able to establish the peripheral
      */
-    esp_err_t init(uint32_t frequency, int SDApin=21, int SCLpin=22, i2c_port_t I2CportToUse = 0) {
+    esp_err_t init(uint32_t frequency, int SDApin=21, int SCLpin=22, i2c_port_t I2CportToUse=I2C_NUM_0, gpio_pullup_t pullEnable=GPIO_PULLUP_ENABLE) {
       if(I2CportToUse < I2C_NUM_MAX) { I2Cport = I2CportToUse; } else { NT3HdebugPrint("can't init(), invalid I2Cport!"); return(ESP_ERR_INVALID_ARG); }
       i2c_config_t conf;
       conf.mode = I2C_MODE_MASTER;
       conf.sda_io_num = SDApin;
-      conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+      conf.sda_pullup_en = pullEnable;
       conf.scl_io_num = SCLpin;
-      conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+      conf.scl_pullup_en = pullEnable;
       conf.master.clk_speed = frequency;
-      //conf.clk_flags = 0;          /*!< Optional, you can use I2C_SCLK_SRC_FLAG_* flags to choose i2c source clock here. */
+      conf.clk_flags = I2C_SCLK_SRC_FLAG_FOR_NOMAL;          /*!< Optional, you can use I2C_SCLK_SRC_FLAG_* flags to choose i2c source clock here. */
       esp_err_t err = i2c_param_config(I2Cport, &conf);
       if (err != ESP_OK) { NT3HdebugPrint("can't init(), i2c_param_config error!"); NT3HdebugPrint(esp_err_to_name(err)); return(err); }
       return(i2c_driver_install(I2Cport, conf.mode, 0, 0, 0));
